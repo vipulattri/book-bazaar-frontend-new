@@ -115,7 +115,7 @@ const Navbar = () => {
     
     try {
       // Load unread messages count
-      const messagesResponse = await fetch(' http://localhost:5000/api/messages/unread', {
+      const messagesResponse = await fetch(' https://book-bazaar-backend-new.onrender.com/api/messages/unread', {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
