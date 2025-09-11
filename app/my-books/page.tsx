@@ -32,7 +32,7 @@ export default function MyBooksPage() {
       if (!user?.id) return
       try {
         setLoading(true)
-        const res = await fetch(`http://localhost:5000/api/books?userId=${encodeURIComponent(user.id)}`)
+        const res = await fetch(`https://book-bazaar-backend-nem0.onrender.com/api/books?userId=${encodeURIComponent(user.id)}`)
         const data = await res.json()
         setBooks(data)
       } finally {
@@ -46,7 +46,7 @@ export default function MyBooksPage() {
     if (!confirm('Delete this book?')) return
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-      const res = await fetch(`http://localhost:5000/api/books/${id}`, {
+      const res = await fetch(`https://book-bazaar-backend-nem0.onrender.com/api/books/${id}`, {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined as any,
       })
@@ -110,7 +110,7 @@ export default function MyBooksPage() {
                         (async () => {
                           try {
                             const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-                            const res = await fetch(`http://localhost:5000/api/messages/partner?bookId=${book._id}&sellerId=${currentUserId}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined as any })
+                            const res = await fetch(`https://book-bazaar-backend-nem0.onrender.com/api/messages/partner?bookId=${book._id}&sellerId=${currentUserId}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined as any })
                             const data = await res.json()
                             if (data?.buyerId) {
                               const key = 'lastChatPartnerByBook'

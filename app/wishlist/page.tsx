@@ -19,7 +19,7 @@ export default function WishlistPage() {
       try {
         setLoading(true)
         const token = localStorage.getItem('token')
-        const res = await fetch('http://localhost:5000/api/wishlist', { headers: token ? { Authorization: `Bearer ${token}` } : undefined as any })
+        const res = await fetch('https://book-bazaar-backend-nem0.onrender.com/api/wishlist', { headers: token ? { Authorization: `Bearer ${token}` } : undefined as any })
         const data = await res.json()
         setBooks((data?.books || []) as Book[])
       } finally { setLoading(false) }
@@ -30,7 +30,7 @@ export default function WishlistPage() {
   const remove = async (bookId: string) => {
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch('http://localhost:5000/api/wishlist/remove', {
+      const res = await fetch('https://book-bazaar-backend-nem0.onrender.com/api/wishlist/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ bookId }),
