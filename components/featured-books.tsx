@@ -36,7 +36,7 @@ export function FeaturedBooks() {
   useEffect(() => {
     const fetchBooks = async () => {
       try {
-        const response = await fetch('https://book-bazaar-backend-new.onrender.com/api/books');
+        const response = await fetch('https://book-bazaar-backend-new-1.onrender.com/api/books');
         if (!response.ok) {
           throw new Error('Failed to fetch books');
         }
@@ -103,7 +103,7 @@ export function FeaturedBooks() {
                       try {
                         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
                         if (!token) { alert('Please login to use wishlist'); return }
-                        const res = await fetch('https://book-bazaar-backend-nem0.onrender.com/api/wishlist/add', {
+                        const res = await fetch('https://book-bazaar-backend-new-1.onrender.com/api/wishlist/add', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                           body: JSON.stringify({ bookId: (book as any)?._id })
@@ -180,11 +180,11 @@ export function FeaturedBooks() {
                   <div className="space-y-2 text-sm text-muted-foreground">
                     <div className="flex items-center">
                       <User className="h-3 w-3 mr-1" />
-                      <span>{book.Name}</span>
+                      <span>{(book as any)?.name || (book as any)?.Name || (book as any)?.userId?.username}</span>
                     </div>
                     <div className="flex items-start">
                       <MapPin className="h-3 w-3 mr-1 mt-0.5 flex-shrink-0" />
-                      <span className="line-clamp-2">{book.Address}</span>
+                      <span className="line-clamp-2">{(book as any)?.address || (book as any)?.Address}</span>
                     </div>
                     {book.university && (
                       <div className="flex items-center">

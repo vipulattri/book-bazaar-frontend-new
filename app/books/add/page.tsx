@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+"use client"
+
+import { useState, useEffect, useRef } from "react"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -15,6 +17,10 @@ import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, Dialog
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Heart, MessageCircle, Star, Filter, Grid, List, GraduationCap, Gift, Plus, AlertTriangle, X, ChevronLeft, ChevronRight } from "lucide-react"
+import { useAuth } from "@/app/context/auth-provider"
+import BuyerSellerChat from "@/app/messages/page"
+import SellerChat from "@/app/components/SellerChat"
+import io, { Socket } from "socket.io-client"
 
 interface Book {
   _id?: string;
@@ -38,9 +44,12 @@ interface Book {
   phone?: string;
   email?: string;
   description?: string;
+  name?: string;
+  Name?: string;
 }
 
 export default function BooksPage() {
+  const { user } = useAuth()
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [priceRange, setPriceRange] = useState([0, 200])
   const [searchQuery, setSearchQuery] = useState("")
@@ -57,9 +66,14 @@ export default function BooksPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
+  const [chatPartners, setChatPartners] = useState<Record<string, string>>({})
+  const [loadingPartners, setLoadingPartners] = useState<Record<string, boolean>>({})
   const [isBookDialogOpen, setIsBookDialogOpen] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [bookNotifications, setBookNotifications] = useState<{[bookId: string]: number}>({})
+  const socketRef = useRef<Socket | null>(null)
   
-  // New book form state with minimal required fields
+  // New book form state with user info from auth
   const [newBook, setNewBook] = useState({
     title: "",
     author: "",
@@ -68,17 +82,19 @@ export default function BooksPage() {
     price: 0,
     Subject: "",
     image: "",
-    Address: "",
+    Address: user?.college || "",
     phone: "",
     description: "",
-    isDonation: false
+    isDonation: false,
+    name: user?.username || "",
+    email: user?.email || ""
   })
 
   useEffect(() => {
     const fetchBooks = async () => {
       try {
         setLoading(true)
-        let url = `https://book-bazaar-backend-new.onrender.com/api/books?`
+        let url = `https://book-bazaar-backend-new-1.onrender.com/api/books?`
         
         // Add filters to the URL
         const params = new URLSearchParams()
@@ -103,15 +119,16 @@ export default function BooksPage() {
           ...book,
           id: book._id,
           subject: book.Subject || book.genre,
-          originalPrice: book.originalPrice || Math.round(book.price * (1 + Math.random() * 3)),
-          rating: book.rating || (3.5 + Math.random() * 1.5).toFixed(1),
-          seller: (book as any)?.userId?.username || (book as any)?.Name || "Anonymous",
-          year: book.year || ["1st", "2nd", "3rd", "4th", "Graduate"][Math.floor(Math.random() * 5)] + " Year",
-          university: book.university || ["MIT", "Stanford", "Harvard", "UCLA"][Math.floor(Math.random() * 4)],
+          originalPrice: book.originalPrice || (book.price ? Math.round(book.price * 1.2) : undefined),
+          rating: book.rating || 4.0,
+          seller: (book as any)?.userId?.username || (book as any)?.name || (book as any)?.Name || "Anonymous",
+          year: book.year,
+          university: book.university,
           isDonation: book.price === 0,
-          course: book.course || `${book.Subject?.substring(0, 3).toUpperCase() || "GEN"} ${Math.floor(100 + Math.random() * 200)}`,
-          email: (book as any)?.userId?.email || book.email,
-          description: book.description || `This ${book.condition.toLowerCase()} condition book is ${book.isDonation ? 'being donated' : 'available for sale'}. ${book.title} by ${book.author} is a great resource for ${book.course}.`
+          course: book.course || `${book.Subject?.substring(0, 3).toUpperCase() || "GEN"} 101`,
+          email: (book as any)?.userId?.email || (book as any)?.email,
+          description: book.description || `This ${String(book.condition || '').toLowerCase()} condition book is ${book.price === 0 ? 'being donated' : 'available for sale'}. ${book.title} by ${book.author} is a great resource for ${book.course}.`,
+          name: (book as any)?.userId?.username || (book as any)?.name || (book as any)?.Name || "Anonymous"
         }))
         
         setBooks(transformedBooks)
@@ -131,9 +148,98 @@ export default function BooksPage() {
     return () => clearTimeout(debounceTimer)
   }, [searchQuery, selectedGenre, selectedCondition, priceRange, showDonationsOnly, sortOption])
 
+  // Socket connection for book-specific notifications
+  useEffect(() => {
+    if (!user?.id) return
+    
+    const socket = io("https://book-bazaar-backend-new-1.onrender.com", {
+      transports: ["websocket"],
+      query: { userId: user.id }
+    })
+    socketRef.current = socket
+    
+    socket.on('notify:new-message', (notification) => {
+      const conversationId = notification.conversationId
+      const bookId = conversationId.includes('|') ? conversationId.split('|')[0] : ''
+      const base = conversationId.includes('|') ? conversationId.split('|')[1] : conversationId
+      const [userId1, userId2] = base.split(':')
+      
+      if (userId1 === user.id || userId2 === user.id) {
+        const otherUserId = userId1 === user.id ? userId2 : userId1
+        try {
+          const key = 'lastChatPartnerByBook'
+          const map = JSON.parse(localStorage.getItem(key) || '{}')
+          if (bookId && otherUserId) {
+            map[bookId] = otherUserId
+            localStorage.setItem(key, JSON.stringify(map))
+          }
+        } catch {}
+        
+        const book = books.find(b => b._id === bookId)
+        if (book) {
+          setBookNotifications(prev => ({
+            ...prev,
+            [book._id!]: (prev[book._id!] || 0) + 1
+          }))
+        }
+      }
+    })
+    
+    return () => {
+      socket.disconnect()
+    }
+  }, [user?.id, books])
+
   const handleBookClick = (book: Book) => {
     setSelectedBook(book)
     setIsBookDialogOpen(true)
+  }
+
+  const fetchChatPartner = async (bookId: string, sellerId: string) => {
+    if (!user?.id || loadingPartners[bookId]) return
+    
+    setLoadingPartners(prev => ({ ...prev, [bookId]: true }))
+    
+    try {
+      // First check localStorage
+      const key = 'lastChatPartnerByBook'
+      const map = JSON.parse(localStorage.getItem(key) || '{}')
+      if (map[bookId] && map[bookId] !== user.id) {
+        setChatPartners(prev => ({ ...prev, [bookId]: map[bookId] }))
+        return
+      }
+      
+      // If not in localStorage, check server
+      const token = localStorage.getItem('token')
+      const res = await fetch(`https://book-bazaar-backend-new-1.onrender.com/api/messages/partner?bookId=${bookId}&sellerId=${sellerId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.buyerId) {
+          // Update both state and localStorage
+          setChatPartners(prev => ({ ...prev, [bookId]: data.buyerId }))
+          map[bookId] = data.buyerId
+          localStorage.setItem(key, JSON.stringify(map))
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching chat partner:', error)
+    } finally {
+      setLoadingPartners(prev => ({ ...prev, [bookId]: false }))
+    }
+  }
+
+  const handleChatClick = (book: Book, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedBook(book)
+    setIsChatOpen(true)
+    // Clear notification for this book
+    setBookNotifications(prev => ({
+      ...prev,
+      [book._id!]: 0
+    }))
   }
 
   const handleSortChange = (value: string) => {
@@ -148,6 +254,16 @@ export default function BooksPage() {
     }))
     if (submitError) setSubmitError("")
   }
+
+  // Update form when user changes
+  useEffect(() => {
+    setNewBook(prev => ({
+      ...prev,
+      Address: user?.college || prev.Address,
+      name: user?.username || prev.name,
+      email: user?.email || prev.email
+    }))
+  }, [user])
 
   const handleSelectChange = (name: string, value: string) => {
     setNewBook(prev => ({
@@ -181,10 +297,17 @@ export default function BooksPage() {
     }
   };
 
-  // Fixed validation function - now only checks that at least title OR author is provided
   const validateForm = () => {
     if (!newBook.title.trim() && !newBook.author.trim()) {
-      setSubmitError("Please provide either a book title or author name")
+      setSubmitError('Please provide either a book title or author name')
+      return false
+    }
+    if (!newBook.Address.trim()) {
+      setSubmitError('Please provide your address')
+      return false
+    }
+    if (!newBook.phone.trim()) {
+      setSubmitError('Please provide your phone number')
       return false
     }
     return true
@@ -200,32 +323,33 @@ export default function BooksPage() {
 
     try {
       const formData = new FormData();
-      
-      // Only append fields that have values
       if (newBook.title.trim()) formData.append('title', newBook.title.trim());
       if (newBook.author.trim()) formData.append('author', newBook.author.trim());
-      
-      // Always include these fields with defaults
       formData.append('genre', newBook.genre);
       formData.append('condition', newBook.condition);
       formData.append('price', newBook.isDonation ? '0' : newBook.price.toString());
-      formData.append('isDonation', newBook.isDonation.toString());
-      
-      // Optional fields - only append if they have values
       if (newBook.Subject.trim()) formData.append('Subject', newBook.Subject.trim());
-      if (newBook.Address.trim()) formData.append('Address', newBook.Address.trim());
-      if (newBook.phone.trim()) formData.append('phone', newBook.phone.trim());
-      if (newBook.description.trim()) formData.append('description', newBook.description.trim());
+      formData.append('Address', newBook.Address.trim());
+      formData.append('phone', newBook.phone.trim());
+      if (newBook.description?.trim()) formData.append('description', newBook.description.trim());
+      formData.append('isDonation', newBook.isDonation.toString());
+      if (newBook.name.trim()) formData.append('name', newBook.name.trim());
+      if (newBook.email.trim()) formData.append('email', newBook.email.trim());
       
       if (imageFile) {
         formData.append('image', imageFile);
       }
 
-      // Send with auth token so backend can attach userId/name
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-      const response = await fetch('https://book-bazaar-backend-new.onrender.com/api/books', {
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('authToken') || localStorage.getItem('jwt') || sessionStorage.getItem('authToken') || sessionStorage.getItem('token')) : null
+
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch('https://book-bazaar-backend-new-1.onrender.com/api/books', {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined as any,
+        headers,
         body: formData,
       })
 
@@ -237,6 +361,9 @@ export default function BooksPage() {
       }
       
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication required. Please log in to post a book.')
+        }
         throw new Error(responseData.message || responseData.error || `Server error: ${response.status}`)
       }
 
@@ -258,10 +385,12 @@ export default function BooksPage() {
         price: 0,
         Subject: "",
         image: "",
-        Address: "",
+        Address: user?.college || "",
         phone: "",
         description: "",
-        isDonation: false
+        isDonation: false,
+        name: user?.username || "",
+        email: user?.email || ""
       })
       setImageFile(null)
       setImagePreview(null)
@@ -423,7 +552,7 @@ export default function BooksPage() {
                         <Input
                           id="title"
                           name="title"
-                          value={newBook.title}
+                          value={newBook.title || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
                           placeholder="Enter book title"
@@ -436,7 +565,7 @@ export default function BooksPage() {
                         <Input
                           id="author"
                           name="author"
-                          value={newBook.author}
+                          value={newBook.author || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
                           placeholder="Enter author name"
@@ -494,7 +623,7 @@ export default function BooksPage() {
                         <Input
                           id="Subject"
                           name="Subject"
-                          value={newBook.Subject}
+                          value={newBook.Subject || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
                           placeholder="e.g., Calculus, Programming (optional)"
@@ -507,7 +636,7 @@ export default function BooksPage() {
                         <Textarea
                           id="description"
                           name="description"
-                          value={newBook.description}
+                          value={newBook.description || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
                           placeholder="Enter book description (optional)"
@@ -538,57 +667,61 @@ export default function BooksPage() {
                         </div>
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="Name" className="text-right">
-                          Your Name
+                        <Label htmlFor="name" className="text-right">
+                          Your Name*
                         </Label>
                         <Input
-                          id="Name"
-                          name="Name"
-                          value={newBook.Name}
+                          id="name"
+                          name="name"
+                          value={newBook.name || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
-                          placeholder="Enter your name (optional)"
+                          required
+                          placeholder="Enter your name"
                         />
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="email" className="text-right">
-                          Your Email
+                          Your Email*
                         </Label>
                         <Input
                           id="email"
                           name="email"
                           type="email"
-                          value={newBook.email}
+                          value={newBook.email || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
-                          placeholder="Enter your email (optional)"
+                          required
+                          placeholder="Enter your email"
                         />
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="Address" className="text-right">
-                          Your Address
+                          Your Address*
                         </Label>
                         <Textarea
                           id="Address"
                           name="Address"
-                          value={newBook.Address}
+                          value={newBook.Address || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
-                          placeholder="Enter your address (optional)"
+                          required
+                          placeholder="Enter your address"
                           rows={3}
                         />
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="phone" className="text-right">
-                          Phone Number
+                          Phone Number*
                         </Label>
                         <Input
                           id="phone"
                           name="phone"
-                          value={newBook.phone}
+                          value={newBook.phone || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
-                          placeholder="Enter your phone number (optional)"
+                          required
+                          placeholder="Enter your phone number"
                         />
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
@@ -618,7 +751,7 @@ export default function BooksPage() {
                             id="price"
                             name="price"
                             type="number"
-                            value={newBook.price}
+                            value={newBook.price || ""}
                             onChange={handleNewBookChange}
                             className="col-span-3"
                             min="0"
@@ -734,17 +867,45 @@ export default function BooksPage() {
                           }`}
                         />
                         <div className="absolute top-2 right-2 flex flex-col gap-2">
-                          <Button 
-                            size="icon" 
-                            variant="secondary" 
+                          <Button
+                            variant="secondary"
+                            size="icon"
                             className="h-8 w-8 rounded-full"
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation()
-                              // Handle favorite action
+                              try {
+                                const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+                                if (!token) { alert('Please login to use wishlist'); return }
+                                const res = await fetch('https://book-bazaar-backend-new-1.onrender.com/api/wishlist/add', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                                  body: JSON.stringify({ bookId: (book as any)?._id })
+                                })
+                                if (res.ok) {
+                                  setBookNotifications(prev => ({ ...prev }))
+                                }
+                              } catch {}
                             }}
                           >
                             <Heart className="h-4 w-4" />
                           </Button>
+                          {/* Chat Now button with notification badge */}
+                          <div className="relative">
+                            <Button 
+                              size="icon" 
+                              variant="secondary" 
+                              className="h-8 w-8 rounded-full"
+                              onClick={(e) => handleChatClick(book, e)}
+                              title="Chat Now"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </Button>
+                            {bookNotifications[book._id!] > 0 && (
+                              <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center bg-red-500 text-white">
+                                {bookNotifications[book._id!]}
+                              </Badge>
+                            )}
+                          </div>
                           {book.price === 0 && (
                             <Badge className="bg-green-500 text-white">
                               <Gift className="h-3 w-3 mr-1" />
@@ -797,14 +958,14 @@ export default function BooksPage() {
                               </div>
                             ) : (
                               <div className="flex items-center">
-                                <span className="text-2xl font-bold text-primary">₹{book.price}</span>
+                                <span className="text-2xl font-bold text-primary">₹{book.price ?? 0}</span>
                                 {book.originalPrice && (
                                   <>
                                     <span className="text-sm text-muted-foreground ml-2 line-through">
                                       ₹{book.originalPrice}
                                     </span>
                                     <Badge variant="secondary" className="ml-2 text-xs">
-                                      Save ₹{(book.originalPrice - book.price).toFixed(2)}
+                                      Save ₹{((book.originalPrice ?? 0) - (book.price ?? 0)).toFixed(2)}
                                     </Badge>
                                   </>
                                 )}
@@ -815,12 +976,14 @@ export default function BooksPage() {
                           <div className="space-y-2 text-sm text-muted-foreground">
                             <div className="flex items-center">
                               <User className="h-3 w-3 mr-1" />
-                              <span>{book.seller}</span>
+                              <span>{book.name || book.seller}</span>
                             </div>
-                            <div className="flex items-start">
-                              <MapPin className="h-3 w-3 mr-1 mt-0.5 flex-shrink-0" />
-                              <span className="line-clamp-2">{book.Address}</span>
-                            </div>
+                            {book.Address && (
+                              <div className="flex items-start">
+                                <MapPin className="h-3 w-3 mr-1 mt-0.5 flex-shrink-0" />
+                                <span className="line-clamp-2">{book.Address}</span>
+                              </div>
+                            )}
                           </div>
                         </CardContent>
                       </div>
@@ -871,14 +1034,109 @@ export default function BooksPage() {
                       variant="default" 
                       className="flex-1"
                       onClick={() => {
-                        if (selectedBook.phone) {
-                          navigator.clipboard.writeText(selectedBook.phone);
-                          alert(`Phone number ${selectedBook.phone} copied to clipboard!`);
-                        }
+                        navigator.clipboard.writeText(selectedBook.phone || '');
+                        alert(`Phone number ${selectedBook.phone || 'N/A'} copied to clipboard!`);
                       }}
                     >
                       {selectedBook.price === 0 ? "Request Book" : "Contact Seller"}
                     </Button>
+                    <Dialog open={isChatOpen} onOpenChange={setIsChatOpen}>
+                      <DialogTrigger asChild>
+                        {(() => {
+                          const sellerId = (selectedBook as any)?.userId?._id || (selectedBook as any)?.userId
+                          const isSeller = sellerId && (user as any)?.id && sellerId === (user as any)?.id
+                          return (
+                            <Button 
+                              variant="outline" 
+                              className="flex-1"
+                              onClick={() => {
+                                if (isSeller && selectedBook?._id) {
+                                  fetchChatPartner(selectedBook._id, sellerId)
+                                }
+                              }}
+                            >
+                              <MessageCircle className="h-4 w-4 mr-2" /> {isSeller ? 'Contact Buyer' : 'Chat with Seller'}
+                            </Button>
+                          )
+                        })()}
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[600px]">
+                        <DialogHeader>
+                          <DialogTitle>Chat with Seller</DialogTitle>
+                          <DialogDescription>Start a conversation about this book.</DialogDescription>
+                        </DialogHeader>
+                        {selectedBook && (
+                          <div className="space-y-4">
+                            {/* Book image and info at top */}
+                            <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                              <img
+                                src={selectedBook.image || "/placeholder.svg?height=100&width=75&text=Book"}
+                                alt={selectedBook.title}
+                                className="w-16 h-20 object-cover rounded"
+                              />
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-lg">{selectedBook.title}</h3>
+                                <p className="text-sm text-gray-600">by {selectedBook.author}</p>
+                                <p className="text-sm font-medium text-green-600">
+                                  {selectedBook.price === 0 ? "FREE" : `₹${selectedBook.price}`}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">Book ID: {(selectedBook as any)?._id}</p>
+                              </div>
+                            </div>
+                            {/* Chat component */}
+                            {(() => {
+                              const sellerId = (selectedBook as any)?.userId?._id || (selectedBook as any)?.userId || ""
+                              const currentUserIdLocal = (user as any)?.id || ""
+                              const isSeller = sellerId && currentUserIdLocal && sellerId === currentUserIdLocal
+                              
+                              console.log('🔍 Books/add page: Chat component rendering check')
+                              console.log('  - Seller ID:', sellerId)
+                              console.log('  - Current User ID:', currentUserIdLocal)
+                              console.log('  - Is Seller:', isSeller)
+                              console.log('  - Selected Book ID:', (selectedBook as any)?._id)
+                              
+                              if (!sellerId) {
+                                console.log('❌ Books/add page: No seller ID found')
+                                return (
+                                  <div className="text-sm text-gray-600 p-3 border rounded">
+                                    Unable to load seller information.
+                                  </div>
+                                )
+                              }
+                              
+                              if (!isSeller) {
+                                console.log('👤 Books/add page: Rendering buyer chat component')
+                                // For buyers, create conversation with seller
+                                const conversationId = `${selectedBook._id}|${[sellerId, currentUserIdLocal].sort().join(":")}`
+                                return <BuyerSellerChat conversationId={conversationId} />
+                              }
+                              
+                              // For sellers, use specialized seller chat component
+                              if (isSeller) {
+                                console.log('🏪 Books/add page: Rendering seller chat component')
+                                console.log('  - Props: bookId =', selectedBook._id, ', sellerId =', currentUserIdLocal)
+                                return (
+                                  <div className="space-y-3">
+                                    <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded p-3">
+                                      <div className="flex items-center mb-1">
+                                        <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                                        <strong>Seller Dashboard</strong>
+                                      </div>
+                                      <p className="text-xs">This shows all conversations with buyers interested in this book.</p>
+                                    </div>
+                                    
+                                    <SellerChat 
+                                      bookId={selectedBook._id!}
+                                      sellerId={currentUserIdLocal}
+                                    />
+                                  </div>
+                                )
+                              }
+                            })()}
+                          </div>
+                        )}
+                      </DialogContent>
+                    </Dialog>
                     <Button variant="outline" size="icon">
                       <Heart className="h-4 w-4" />
                     </Button>
@@ -943,7 +1201,7 @@ export default function BooksPage() {
                     <div className="space-y-3 text-sm">
                       <div className="flex items-center">
                         <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                        <span>{selectedBook.seller}</span>
+                        <span>{selectedBook.name || selectedBook.seller}</span>
                       </div>
                       {selectedBook.Address && (
                         <div className="flex items-center">

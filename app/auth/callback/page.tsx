@@ -18,7 +18,7 @@ export default function AuthCallbackPage() {
 
     const fetchUser = async () => {
       try {
-        const res = await fetch('https://book-bazaar-backend-new.onrender.com/api/auth/me', {
+        const res = await fetch('https://book-bazaar-backend-new-1.onrender.com/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` }
         })
         const data = await res.json()

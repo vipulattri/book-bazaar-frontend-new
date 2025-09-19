@@ -278,7 +278,7 @@ export default function LearnTogether() {
       setStatus('Connecting to server...');
 
       // Connect to Socket.IO server
-      socketRef.current = io(' https://book-bazaar-backend-new.onrender.com', {
+      socketRef.current = io(' https://book-bazaar-backend-new-1.onrender.com', {
         transports: ['websocket'],
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
