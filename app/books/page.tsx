@@ -1,8 +1,6 @@
 "use client"
 
-"use client"
-
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
@@ -48,7 +46,7 @@ interface Book {
   Name?: string;
 }
 
-export default function BooksPage() {
+function BooksPageContent() {
   const { user } = useAuth()
   const searchParams = useSearchParams()
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
@@ -1236,5 +1234,19 @@ export default function BooksPage() {
 
       <Footer />
     </div>
+  )
+}
+
+export default function BooksPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background">
+        <div className="container py-8 flex justify-center">
+          <div className="text-center">Loading...</div>
+        </div>
+      </div>
+    }>
+      <BooksPageContent />
+    </Suspense>
   )
 }

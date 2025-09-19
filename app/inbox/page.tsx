@@ -32,7 +32,7 @@ interface Conversation {
   isActive: boolean
 }
 
-const API_URL = "https://book-bazaar-backend-new-1.onrender.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://book-bazaar-backend-new-1.onrender.com"
 
 export default function InboxPage() {
   const { user } = useAuth()

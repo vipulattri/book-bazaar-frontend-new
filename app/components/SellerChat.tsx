@@ -21,7 +21,7 @@ interface Conversation {
   lastMessageAt: string
 }
 
-const API_URL = "https://book-bazaar-backend-new-1.onrender.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://book-bazaar-backend-new-1.onrender.com"
 
 export default function SellerChat({
   bookId,
