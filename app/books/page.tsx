@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+"use client"
+
+import { useState, useEffect, useRef } from "react"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -38,6 +39,7 @@ interface Book {
   seller?: string;
   year?: string;
   university?: string;
+  isDonation?: boolean;
   Address?: string;
   phone?: string;
   email?: string;
@@ -46,12 +48,11 @@ interface Book {
   Name?: string;
 }
 
-function BooksPageContent() {
+export default function BooksPage() {
   const { user } = useAuth()
-  const searchParams = useSearchParams()
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [priceRange, setPriceRange] = useState([0, 200])
-  const [searchQuery, setSearchQuery] = useState(searchParams?.get('search') || "")
+  const [searchQuery, setSearchQuery] = useState("")
   const [selectedGenre, setSelectedGenre] = useState("all")
   const [selectedCondition, setSelectedCondition] = useState("all")
   const [showDonationsOnly, setShowDonationsOnly] = useState(false)
@@ -315,9 +316,7 @@ function BooksPageContent() {
   const handleSubmitNewBook = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!validateForm()) {
-      return
-    }
+    if (!validateForm()) return
 
     setIsSubmitting(true)
     setSubmitError("")
@@ -510,7 +509,7 @@ function BooksPageContent() {
               {/* Price Range */}
               <div className="space-y-2 mb-4">
                 <label className="text-sm font-medium">
-                  Price Range: ₹{priceRange[0]} - ₹{priceRange[1]}
+                  Price Range: ${priceRange[0]} - ${priceRange[1]}
                 </label>
                 <Slider 
                   value={priceRange} 
@@ -548,7 +547,7 @@ function BooksPageContent() {
                   <DialogHeader>
                     <DialogTitle>List a New Book</DialogTitle>
                     <DialogDescription>
-                      Fill in the details of the book you want to sell or donate.
+                      Fill in either the title or author name. All other fields are optional.
                     </DialogDescription>
                   </DialogHeader>
                   
@@ -592,7 +591,7 @@ function BooksPageContent() {
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="genre" className="text-right">
-                          Genre*
+                          Genre
                         </Label>
                         <Select 
                           value={newBook.genre}
@@ -614,7 +613,7 @@ function BooksPageContent() {
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="condition" className="text-right">
-                          Condition*
+                          Condition
                         </Label>
                         <Select 
                           value={newBook.condition}
@@ -642,7 +641,7 @@ function BooksPageContent() {
                           value={newBook.Subject || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
-                          placeholder="e.g., Calculus, Programming"
+                          placeholder="e.g., Calculus, Programming (optional)"
                         />
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
@@ -655,7 +654,7 @@ function BooksPageContent() {
                           value={newBook.description || ""}
                           onChange={handleNewBookChange}
                           className="col-span-3"
-                          placeholder="Enter book description"
+                          placeholder="Enter book description (optional)"
                           rows={3}
                         />
                       </div>
@@ -761,7 +760,7 @@ function BooksPageContent() {
                       {!newBook.isDonation && (
                         <div className="grid grid-cols-4 items-center gap-4">
                           <Label htmlFor="price" className="text-right">
-                            Price (₹)*
+                            Price (₹)
                           </Label>
                           <Input
                             id="price"
@@ -772,7 +771,6 @@ function BooksPageContent() {
                             className="col-span-3"
                             min="0"
                             step="0.01"
-                            required={!newBook.isDonation}
                             disabled={newBook.isDonation}
                             placeholder="0.00"
                           />
@@ -943,7 +941,7 @@ function BooksPageContent() {
                                 <Star
                                   key={i}
                                   className={`h-3 w-3 ${
-                                    i < Math.floor(Number(book.rating)) ? "text-yellow-400 fill-current" : "text-gray-300"
+                                    i < Math.floor(Number(book.rating || 0)) ? "text-yellow-400 fill-current" : "text-gray-300"
                                   }`}
                                 />
                               ))}
@@ -975,14 +973,14 @@ function BooksPageContent() {
                               </div>
                             ) : (
                               <div className="flex items-center">
-                                <span className="text-2xl font-bold text-primary">₹{(book.price ?? 0)}</span>
+                                <span className="text-2xl font-bold text-primary">₹{book.price ?? 0}</span>
                                 {book.originalPrice && (
                                   <>
                                     <span className="text-sm text-muted-foreground ml-2 line-through">
-                                      ₹{book.originalPrice ?? 0}
+                                      ₹{book.originalPrice}
                                     </span>
                                     <Badge variant="secondary" className="ml-2 text-xs">
-                                      Save ₹{(((book.originalPrice ?? 0) - (book.price ?? 0)).toFixed(2))}
+                                      Save ₹{((book.originalPrice ?? 0) - (book.price ?? 0)).toFixed(2)}
                                     </Badge>
                                   </>
                                 )}
@@ -1106,14 +1104,14 @@ function BooksPageContent() {
                               const currentUserIdLocal = (user as any)?.id || ""
                               const isSeller = sellerId && currentUserIdLocal && sellerId === currentUserIdLocal
                               
-                              console.log('🔍 Books page: Chat component rendering check')
+                              console.log('🔍 Books/add page: Chat component rendering check')
                               console.log('  - Seller ID:', sellerId)
                               console.log('  - Current User ID:', currentUserIdLocal)
                               console.log('  - Is Seller:', isSeller)
                               console.log('  - Selected Book ID:', (selectedBook as any)?._id)
                               
                               if (!sellerId) {
-                                console.log('❌ Books page: No seller ID found')
+                                console.log('❌ Books/add page: No seller ID found')
                                 return (
                                   <div className="text-sm text-gray-600 p-3 border rounded">
                                     Unable to load seller information.
@@ -1122,7 +1120,7 @@ function BooksPageContent() {
                               }
                               
                               if (!isSeller) {
-                                console.log('👤 Books page: Rendering buyer chat component')
+                                console.log('👤 Books/add page: Rendering buyer chat component')
                                 // For buyers, create conversation with seller
                                 const conversationId = `${selectedBook._id}|${[sellerId, currentUserIdLocal].sort().join(":")}`
                                 return <BuyerSellerChat conversationId={conversationId} />
@@ -1130,7 +1128,7 @@ function BooksPageContent() {
                               
                               // For sellers, use specialized seller chat component
                               if (isSeller) {
-                                console.log('🏪 Books page: Rendering seller chat component')
+                                console.log('🏪 Books/add page: Rendering seller chat component')
                                 console.log('  - Props: bookId =', selectedBook._id, ', sellerId =', currentUserIdLocal)
                                 return (
                                   <div className="space-y-3">
@@ -1200,7 +1198,7 @@ function BooksPageContent() {
                       <div className="space-y-1">
                         <p className="text-muted-foreground">Posted</p>
                         <p className="font-medium">
-                          {selectedBook && selectedBook.createdAt ? new Date(String(selectedBook.createdAt)).toLocaleDateString() : 'Recently'}
+                          {selectedBook.createdAt ? new Date(selectedBook.createdAt).toLocaleDateString() : 'Recently'}
                         </p>
                       </div>
                     </div>
@@ -1249,19 +1247,5 @@ function BooksPageContent() {
 
       <Footer />
     </div>
-  )
-}
-
-export default function BooksPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-background">
-        <div className="container py-8 flex justify-center">
-          <div className="text-center">Loading...</div>
-        </div>
-      </div>
-    }>
-      <BooksPageContent />
-    </Suspense>
   )
 }
