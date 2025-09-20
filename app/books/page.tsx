@@ -93,7 +93,7 @@ function BooksPageContent() {
     const fetchBooks = async () => {
       try {
         setLoading(true)
-        let url = `https://book-bazaar-backend-new-1.onrender.com/api/books?`
+        let url = `${process.env.NEXT_PUBLIC_API_URL || 'https://book-bazaar-backend-new-1.onrender.com'}/api/books?`
         
         // Add filters to the URL
         const params = new URLSearchParams()
@@ -151,7 +151,7 @@ function BooksPageContent() {
   useEffect(() => {
     if (!user?.id) return
     
-    const socket = io("https://book-bazaar-backend-new-1.onrender.com", {
+    const socket = io(process.env.NEXT_PUBLIC_API_URL || "https://book-bazaar-backend-new-1.onrender.com", {
       transports: ["websocket"],
       query: { userId: user.id }
     })
@@ -210,7 +210,7 @@ function BooksPageContent() {
       
       // If not in localStorage, check server
       const token = localStorage.getItem('token')
-      const res = await fetch(`https://book-bazaar-backend-new-1.onrender.com/api/messages/partner?bookId=${bookId}&sellerId=${sellerId}`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://book-bazaar-backend-new-1.onrender.com'}/api/messages/partner?bookId=${bookId}&sellerId=${sellerId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       })
       
@@ -442,11 +442,26 @@ function BooksPageContent() {
               <h3 className="font-semibold mb-4 flex items-center">
                 <Filter className="h-4 w-4 mr-2" />
                 Find Your Books
+                {(searchQuery || selectedGenre !== 'all' || selectedCondition !== 'all' || priceRange[0] > 0 || priceRange[1] < 200 || showDonationsOnly) && (
+                  <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                    {[searchQuery, selectedGenre !== 'all' ? selectedGenre : null, selectedCondition !== 'all' ? selectedCondition : null, (priceRange[0] > 0 || priceRange[1] < 200) ? 'Price' : null, showDonationsOnly ? 'Free' : null].filter(Boolean).length} active
+                  </span>
+                )}
               </h3>
 
               {/* Search */}
               <div className="space-y-2 mb-4">
-                <label className="text-sm font-medium">Search</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-medium">Search</label>
+                  {searchQuery && (
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
                 <Input
                   placeholder="Course code, title, author..."
                   value={searchQuery}
